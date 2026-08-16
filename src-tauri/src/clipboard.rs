@@ -1,10 +1,11 @@
 //! 剪贴板读写封装（基于 arboard），并维护"自身写入"时间戳用于防回环。
 
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use windows::Win32::System::DataExchange::IsClipboardFormatAvailable;
-use windows::Win32::System::Ole::{CF_BITMAP, CF_DIBV5};
+use windows::Win32::System::Ole::{CF_BITMAP, CF_DIBV5, CF_HDROP};
 
 /// 自身写入后的冷却窗口（毫秒）：此窗口内收到的剪贴板变化视为自身写入的回环，应忽略
 const SELF_WRITE_WINDOW_MS: u64 = 200;
@@ -28,6 +29,11 @@ impl Clipboard {
         }
     }
 
+    /// 剪贴板当前是否包含文件列表（CF_HDROP，文件管理器复制）
+    pub fn has_files(&self) -> bool {
+        unsafe { IsClipboardFormatAvailable(CF_HDROP.0 as u32).is_ok() }
+    }
+
     /// 读取剪贴板文本，失败返回 None
     pub fn read_text(&self) -> Option<String> {
         arboard::Clipboard::new().ok()?.get_text().ok()
@@ -36,6 +42,19 @@ impl Clipboard {
     /// 读取剪贴板图片（RGBA 像素），失败返回 None
     pub fn read_image(&self) -> Option<arboard::ImageData<'static>> {
         arboard::Clipboard::new().ok()?.get_image().ok()
+    }
+
+    /// 读取剪贴板文件列表，失败返回 None
+    pub fn read_files(&self) -> Option<Vec<PathBuf>> {
+        arboard::Clipboard::new().ok()?.get().file_list().ok()
+    }
+
+    /// 写入文件列表并标记自身写入
+    pub fn write_files(&self, paths: Vec<PathBuf>) -> Result<(), String> {
+        let mut cb = arboard::Clipboard::new().map_err(|e| e.to_string())?;
+        cb.set().file_list(&paths).map_err(|e| e.to_string())?;
+        self.mark_self_write();
+        Ok(())
     }
 
     /// 写入文本并标记自身写入

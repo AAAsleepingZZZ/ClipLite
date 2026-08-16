@@ -36,6 +36,8 @@
       '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
     IMAGE:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
+    FILE:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
   };
 
   /* ---------- 状态 ---------- */
@@ -370,6 +372,32 @@
       li.append(main);
 
       if (!state.demoMode) loadThumb(item, thumb);
+      return li;
+    }
+
+    // ---- 文件条目：文件图标 + 文件名 + 路径 ----
+    if (item.kind === 'file') {
+      li.classList.add('item-file');
+      const paths = (item.content || '').split('\n').filter(Boolean);
+      const fileName = paths[0] ? paths[0].split(/[\\/]/).pop() : '文件';
+
+      const icon = document.createElement('div');
+      icon.className = 'item-file-icon';
+      icon.innerHTML = ICONS.FILE;
+      li.append(icon);
+
+      const main = document.createElement('div');
+      main.className = 'item-main';
+      const name = document.createElement('div');
+      name.className = 'item-file-name';
+      name.textContent = paths.length > 1 ? `${fileName} 等 ${paths.length} 项` : fileName;
+      name.title = paths.join('\n');
+      main.append(name);
+      const sub = document.createElement('div');
+      sub.className = 'item-file-path';
+      sub.textContent = paths.length > 1 ? `${paths.length} 个文件` : paths[0] || '';
+      main.append(sub);
+      li.append(main);
       return li;
     }
 

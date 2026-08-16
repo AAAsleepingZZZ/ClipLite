@@ -113,6 +113,32 @@ impl Store {
         Ok(Some(self.get_item(id)?))
     }
 
+    /// 插入一条文件记录（复制文件/文件夹时，只记录路径列表，不读内容）。
+    /// 路径列表以换行分隔存入 content；按路径列表哈希去重。
+    pub fn insert_files(&self, paths: &[PathBuf]) -> Result<Option<Item>, StoreError> {
+        if paths.is_empty() {
+            return Ok(None);
+        }
+        let joined: Vec<String> = paths
+            .iter()
+            .map(|p| p.to_string_lossy().to_string())
+            .collect();
+        let content = joined.join("\n");
+        let hash = hash_bytes(content.as_bytes());
+        let now = now_ms() as i64;
+        if self.touch_existing(&hash, now)? {
+            return Ok(None);
+        }
+        self.conn.execute(
+            "INSERT INTO items (kind, content, image_path, hash, pinned, created_at)
+             VALUES ('file', ?1, NULL, ?2, 0, ?3)",
+            params![content, hash, now],
+        )?;
+        let id = self.conn.last_insert_rowid();
+        self.trim()?;
+        Ok(Some(self.get_item(id)?))
+    }
+
     /// 查询历史：`query` 非空时按内容模糊搜索（LIKE，转义通配符），否则返回全部。
     /// 排序：置顶优先，其次按创建时间倒序；最多返回 500 条。
     pub fn list(&self, query: Option<&str>) -> Result<Vec<Item>, StoreError> {

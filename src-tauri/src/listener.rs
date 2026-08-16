@@ -81,6 +81,15 @@ impl ListenerContext {
                     }
                 }
             }
+        } else if self.clipboard.has_files() {
+            // 文件列表（文件管理器复制）：只记录路径，不读内容
+            match self.clipboard.read_files() {
+                None => return,
+                Some(paths) => match self.store.lock() {
+                    Ok(store) => store.insert_files(&paths),
+                    Err(_) => return,
+                },
+            }
         } else {
             match self.clipboard.read_text() {
                 None => return,

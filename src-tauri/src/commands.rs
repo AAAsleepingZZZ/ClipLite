@@ -170,7 +170,7 @@ pub struct UpdateSettings {
     pub glass_alpha: Option<f64>,
 }
 
-/// 把条目内容写入系统剪贴板（文本或图片），写成功即标记自身写入
+/// 把条目内容写入系统剪贴板（文本、图片或文件列表），写成功即标记自身写入
 fn copy_to_clipboard(store: &Store, clipboard: &Clipboard, id: i64) -> Result<(), String> {
     let item = store.get_item(id).map_err(|e| e.to_string())?;
     match item.kind.as_str() {
@@ -192,6 +192,18 @@ fn copy_to_clipboard(store: &Store, clipboard: &Clipboard, id: i64) -> Result<()
                 bytes: Cow::Owned(rgba.into_raw()),
             };
             clipboard.write_image(&data)
+        }
+        "file" => {
+            let content = item.content.ok_or_else(|| "条目内容为空".to_string())?;
+            let paths: Vec<std::path::PathBuf> = content
+                .lines()
+                .filter(|l| !l.trim().is_empty())
+                .map(std::path::PathBuf::from)
+                .collect();
+            if paths.is_empty() {
+                return Err("文件条目为空".to_string());
+            }
+            clipboard.write_files(paths)
         }
         other => Err(format!("未知条目类型: {other}")),
     }
