@@ -1,0 +1,1024 @@
+/* ============================================================
+   ClipLite 前端样式 —— 深色毛玻璃剪切板面板
+   设计宪法（禁区清单，实现时逐条遵守）：
+   1. 强调蓝 #6C8CFF 只出现在「信号」处：星标 / 搜索高亮 / 焦点边框 / 开关开启
+   2. 层次只走明度阶梯（白 4% → 8%），不叠加彩色渐变
+   3. 动效统一 140ms ease-out，入场 ≤180ms，高频反馈 ≤300ms
+   4. 单光源：阴影一律自上方投射，黑影 y≥0
+   5. 一屏一张王牌：面板上唯一的彩色实例是搜索框焦点光晕（3px 淡蓝）
+   ============================================================ */
+
+:root {
+  /* 色彩令牌 */
+  --bg: rgba(20, 20, 26, 0.55);         /* 面板底：半透明，让系统亚克力透出 */
+  --stroke: rgba(255, 255, 255, 0.08);  /* 面板 / 弹窗内描边 */
+  --sep: rgba(255, 255, 255, 0.05);     /* 行间分隔线 */
+  --layer-1: rgba(255, 255, 255, 0.04); /* 次级底（缩略图占位等） */
+  --layer-2: rgba(255, 255, 255, 0.06); /* 搜索栏底 */
+  --hover: rgba(255, 255, 255, 0.06);   /* 悬停底 */
+  --active: rgba(255, 255, 255, 0.09);  /* 按下底 */
+  --text-1: #ececf1;                    /* 主文字 */
+  --text-2: #9a9aa8;                    /* 次级文字 */
+  --text-3: #6a6a78;                    /* 弱化文字 */
+  --accent: #6c8cff;                    /* 强调蓝 */
+  --danger: #e56a6a;                    /* 危险操作（删除） */
+  --radius: 12px;                       /* 面板圆角 */
+  --r-sm: 8px;                          /* 搜索栏 / 条目圆角 */
+  --r-xs: 6px;                          /* 小控件圆角 */
+  --dur: 140ms;                         /* 全局过渡时长 */
+
+  font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei",
+    system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-1);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  user-select: none; /* 面板是操作台，文字默认不可选 */
+  cursor: default;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: transparent; /* 透明窗口，面板层负责背景 */
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* ---------- 面板 ---------- */
+
+#app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border-radius: var(--radius);
+  box-shadow: inset 0 0 0 1px var(--stroke); /* 内描边，毛玻璃边缘更清晰 */
+  overflow: hidden;
+}
+
+/* ---------- 非 Tauri 环境提示 ---------- */
+
+#env-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin: 10px 10px 0;
+  padding: 7px 10px;
+  border-radius: var(--r-sm);
+  background: rgba(108, 140, 255, 0.1);
+  border: 1px solid rgba(108, 140, 255, 0.28);
+  color: #b9c6ff;
+  font-size: 12px;
+}
+
+#env-hint svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* ---------- 搜索栏 ---------- */
+
+.search-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+  margin: 10px 10px 0;
+  padding: 0 6px 0 10px;
+  background: var(--layer-2);
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  transition: border-color var(--dur), box-shadow var(--dur),
+    background-color var(--dur);
+}
+
+/* 聚焦时边框高亮（全面板唯一的彩色光晕） */
+.search-bar:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(108, 140, 255, 0.18);
+}
+
+.search-icon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: var(--text-3);
+}
+
+#search-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+  user-select: text;
+}
+
+#search-input::placeholder {
+  color: var(--text-3);
+}
+
+.search-clear,
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: background-color var(--dur), color var(--dur);
+}
+
+.search-clear:hover,
+.icon-btn:hover {
+  background: var(--hover);
+  color: var(--text-1);
+}
+
+.search-clear svg,
+.icon-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* ---------- 列表区域 ---------- */
+
+#list {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0 10px 8px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#pinned-group {
+  flex-shrink: 0;
+  max-height: 38%; /* 置顶过多时自身滚动，不挤压历史区 */
+}
+
+#history-group {
+  flex: 1;
+}
+
+.group-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  margin: 12px 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+}
+
+.group-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.items {
+  list-style: none;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+#history-list {
+  flex: 1;
+}
+
+.items {
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+  scrollbar-width: thin;
+}
+
+/* 细滚动条：6px 圆角 */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+/* ---------- 条目 ---------- */
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 38px;
+  padding: 0 10px;
+  border-radius: var(--r-sm);
+  transition: background-color var(--dur), transform var(--dur);
+  animation: item-in 180ms ease-out;
+}
+
+.item + .item {
+  margin-top: 2px;
+}
+
+.item:hover {
+  background: var(--hover);
+}
+
+.item:active {
+  background: var(--active);
+  transform: scale(0.985); /* 按下微缩，模拟物理按压 */
+}
+
+@keyframes item-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.item-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.item-preview {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  color: var(--text-1);
+}
+
+/* 换行标记 ⏎ */
+.item-nl {
+  margin: 0 1px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+/* 搜索命中高亮：强调蓝底白字 */
+mark {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.item-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.item-time {
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 置顶星标 */
+.item-star {
+  display: flex;
+  width: 13px;
+  height: 13px;
+  color: var(--accent);
+}
+
+.item-star svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* ---------- 图片条目 ---------- */
+
+.item-image {
+  height: 80px;
+  padding: 8px 10px;
+}
+
+.item-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--r-sm);
+  background: var(--layer-1);
+  overflow: hidden;
+}
+
+.item-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.thumb-ph {
+  display: flex;
+  width: 20px;
+  height: 20px;
+  color: var(--text-3);
+}
+
+.thumb-ph svg {
+  width: 100%;
+  height: 100%;
+}
+
+.item-image-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+/* ---------- 空状态 ---------- */
+
+.empty-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+/* ---------- 右键菜单 ---------- */
+
+.context-menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 148px;
+  padding: 4px;
+  background: rgba(30, 30, 40, 0.92);
+  backdrop-filter: blur(18px);
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  visibility: hidden;
+  transform: scale(0.96);
+  transform-origin: top left;
+  transition: opacity var(--dur), transform var(--dur),
+    visibility 0s linear var(--dur);
+}
+
+.context-menu.open {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition: opacity var(--dur), transform var(--dur);
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur), color var(--dur);
+}
+
+.menu-item svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--text-3);
+  transition: color var(--dur);
+}
+
+.menu-item:hover {
+  background: var(--hover);
+}
+
+.menu-item.danger {
+  color: var(--danger);
+}
+
+.menu-item.danger svg {
+  color: var(--danger);
+}
+
+.menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--sep);
+}
+
+/* ---------- 设置弹窗 ---------- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 8, 12, 0.45); /* 遮罩压暗面板 */
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 160ms, visibility 0s linear 160ms;
+}
+
+.modal-backdrop.open {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 160ms;
+}
+
+.modal {
+  width: 320px;
+  padding: 18px 18px 14px;
+  background: rgba(28, 28, 36, 0.94);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  transform: scale(0.95) translateY(4px);
+  transition: transform 160ms ease-out;
+}
+
+.modal-backdrop.open .modal {
+  transform: none;
+}
+
+.modal h2 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 0;
+}
+
+.setting-row + .setting-row {
+  border-top: 1px solid var(--sep);
+}
+
+.setting-info {
+  min-width: 0;
+}
+
+.setting-name {
+  font-size: 13px;
+  color: var(--text-1);
+}
+
+.setting-desc {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.hotkey-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* 热键按钮（kbd 质感） */
+.hotkey-btn {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--r-xs);
+  background: var(--layer-1);
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--dur), background-color var(--dur),
+    color var(--dur), box-shadow var(--dur);
+}
+
+.hotkey-btn:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: var(--layer-2);
+}
+
+/* 按键捕获中：呼吸光晕提示可输入 */
+.hotkey-btn.capturing {
+  border-color: var(--accent);
+  color: var(--accent);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+/* 已捕获新键但未保存 */
+.hotkey-btn.pending {
+  border-color: rgba(108, 140, 255, 0.5);
+  color: var(--accent);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(108, 140, 255, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(108, 140, 255, 0);
+  }
+}
+
+.text-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--r-xs);
+  transition: color var(--dur), background-color var(--dur);
+}
+
+.text-btn:hover {
+  color: var(--text-1);
+  background: var(--hover);
+}
+
+.hotkey-error {
+  margin-top: 10px;
+  padding: 7px 10px;
+  border-radius: var(--r-xs);
+  background: rgba(229, 106, 106, 0.1);
+  border: 1px solid rgba(229, 106, 106, 0.3);
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.btn {
+  height: 30px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 7px;
+  background: var(--layer-2);
+  color: var(--text-1);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background-color var(--dur), opacity var(--dur);
+}
+
+.btn:hover {
+  background: var(--hover);
+}
+
+.btn.primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn.primary:hover {
+  background: #7e9aff;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ---------- 自定义开关 ---------- */
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.slider {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  pointer-events: none;
+  transition: background-color var(--dur);
+}
+
+.slider::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  transition: transform var(--dur);
+}
+
+.switch input:checked + .slider {
+  background: var(--accent);
+}
+
+.switch input:checked + .slider::before {
+  transform: translateX(16px);
+}
+
+.switch input:focus-visible + .slider {
+  box-shadow: 0 0 0 3px rgba(108, 140, 255, 0.25);
+}
+
+/* ---------- 轻提示 ---------- */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  z-index: 60;
+  max-width: 80%;
+  padding: 7px 14px;
+  background: rgba(32, 32, 42, 0.95);
+  border: 1px solid var(--stroke);
+  border-radius: var(--r-sm);
+  color: var(--text-1);
+  font-size: 12px;
+  text-align: center;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-50%) translateY(4px);
+  transition: opacity var(--dur), transform var(--dur),
+    visibility 0s linear var(--dur);
+}
+
+.toast.show {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+  transition: opacity var(--dur), transform var(--dur);
+}
+
+/* ---------- 动效降级 ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================================================
+   V2 质感升级：自绘毛玻璃 / 呼吸光晕 / 键盘选中态 / 浮层阴影
+   （后端在面板弹出前截取屏幕，前端模糊后作为背景层）
+   ============================================================ */
+
+/* ---- 毛玻璃背景层：截屏模糊层 ---- */
+#glass-bg {
+  position: absolute;
+  inset: -32px; /* 外扩一圈，避免模糊边缘露底 */
+  background-image: var(--glass-img, none);
+  background-size: cover;
+  background-position: center;
+  /* 模糊已在 Rust 端完成，前端不使用 CSS filter（透明窗口合成有坑） */
+  opacity: 0;
+  transition: opacity 0.45s ease;
+  pointer-events: none;
+}
+
+#app.glass-on #glass-bg {
+  opacity: 1;
+}
+
+/* ---- 染色层：顶部高光 + 底部暗角 + 基础底色，叠在模糊层之上 ---- */
+#glass-tint {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.055) 0%, rgba(255, 255, 255, 0.018) 24%, rgba(255, 255, 255, 0) 42%),
+    radial-gradient(150% 120% at 50% 118%, rgba(0, 0, 0, 0.34) 0%, rgba(0, 0, 0, 0.1) 46%, rgba(0, 0, 0, 0) 72%),
+    rgba(22, 22, 30, 0.62);
+  pointer-events: none;
+}
+
+/* ---- 面板本体：内容层压过玻璃；底色仅作为玻璃不可用时的兜底 ---- */
+#app {
+  background: rgba(24, 24, 32, 0.88);
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.55),
+    0 6px 20px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06); /* 顶部内高光收边 */
+}
+
+#app > :not(#glass-bg):not(#glass-tint) {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---- 面板入场（呼吸感：微沉后回落） ---- */
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.975);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+#app.panel-open {
+  animation: panel-in 0.26s cubic-bezier(0.16, 0.84, 0.3, 1.06) both;
+}
+
+/* ---- 键盘选中态：左侧呼吸光柱 ---- */
+.item {
+  position: relative;
+}
+
+.item.selected {
+  background: rgba(108, 140, 255, 0.14);
+}
+
+.item.selected:hover {
+  background: rgba(108, 140, 255, 0.17);
+}
+
+.item.selected::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 22%;
+  bottom: 22%;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  animation: sel-breathe 2.2s ease-in-out infinite alternate;
+}
+
+@keyframes sel-breathe {
+  from {
+    opacity: 0.45;
+    box-shadow: 0 0 4px rgba(108, 140, 255, 0.35);
+  }
+  to {
+    opacity: 1;
+    box-shadow: 0 0 12px rgba(108, 140, 255, 0.9);
+  }
+}
+
+/* ---- 搜索框聚焦：呼吸光晕（覆盖静态 3px 环为脉动环） ---- */
+@keyframes ring-breathe {
+  from {
+    box-shadow: 0 0 0 1px rgba(108, 140, 255, 0.45), 0 0 8px rgba(108, 140, 255, 0.12);
+  }
+  to {
+    box-shadow: 0 0 0 1px rgba(108, 140, 255, 0.9), 0 0 20px rgba(108, 140, 255, 0.35);
+  }
+}
+
+.search-bar:focus-within {
+  animation: ring-breathe 2.6s ease-in-out infinite alternate;
+}
+
+/* ---- 动效减弱偏好：全部降级为无动画 ---- */
+@media (prefers-reduced-motion: reduce) {
+  #app.panel-open,
+  .item.selected::before,
+  .search-bar:focus-within {
+    animation: none;
+  }
+  #glass-bg {
+    transition: none;
+  }
+}
+
+
+/* ============================================================
+   V3 视觉修正：染色调淡（毛玻璃透出感）、对比度、选中态、滚动条
+   ============================================================ */
+
+/* ---- 染色层调淡：让模糊背景透出更多 ---- */
+#glass-tint {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.016) 24%, rgba(255, 255, 255, 0) 42%),
+    radial-gradient(150% 120% at 50% 118%, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.06) 46%, rgba(0, 0, 0, 0) 72%),
+    rgba(26, 26, 36, var(--glass-alpha, 0.46));
+}
+
+/* ---- 组标题对比度提升 ---- */
+.group-title {
+  color: rgba(236, 236, 241, 0.66);
+}
+
+/* ---- 选中态加强：更明显的高亮与光柱 ---- */
+.item.selected {
+  background: rgba(108, 140, 255, 0.2);
+}
+
+.item.selected:hover {
+  background: rgba(108, 140, 255, 0.24);
+}
+
+.item.selected::before {
+  width: 3px;
+  background: #7f9bff;
+  box-shadow: 0 0 12px rgba(108, 140, 255, 0.95);
+}
+
+/* ---- 滚动条：隐藏原生箭头按钮，纯细条 ---- */
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ============================================================
+   V4 透出强度滑动条：渐变轨道 + 呼吸光晕拇指 + 数值脉冲
+   ============================================================ */
+
+.glass-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  max-width: 200px;
+}
+
+.glass-range {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  height: 20px;
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+}
+
+/* 轨道：左侧填充蓝渐变，右侧暗色 */
+.glass-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    90deg,
+    #6c8cff 0%,
+    #8fa8ff var(--fill, 50%),
+    rgba(255, 255, 255, 0.1) var(--fill, 50%),
+    rgba(255, 255, 255, 0.1) 100%
+  );
+  transition: box-shadow var(--dur) ease;
+}
+
+/* 拇指：白珠 + 蓝光晕，悬停/拖动时呼吸 */
+.glass-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: #fff;
+  border: none;
+  box-shadow:
+    0 0 0 4px rgba(108, 140, 255, 0.16),
+    0 2px 8px rgba(0, 0, 0, 0.45);
+  transition: transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.2), box-shadow 0.18s ease;
+}
+
+.glass-range:hover::-webkit-slider-thumb,
+.glass-range:active::-webkit-slider-thumb {
+  transform: scale(1.18);
+  animation: range-breathe 1.8s ease-in-out infinite alternate;
+}
+
+@keyframes range-breathe {
+  from {
+    box-shadow: 0 0 0 5px rgba(108, 140, 255, 0.2), 0 0 10px rgba(108, 140, 255, 0.35);
+  }
+  to {
+    box-shadow: 0 0 0 6px rgba(108, 140, 255, 0.32), 0 0 18px rgba(108, 140, 255, 0.7);
+  }
+}
+
+/* 数值：等宽数字，变化时脉冲 */
+.glass-val {
+  min-width: 36px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  transition: color var(--dur) ease;
+}
+
+.glass-val.bump {
+  animation: val-bump 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.3);
+}
+
+@keyframes val-bump {
+  0% {
+    transform: scale(1);
+    color: var(--accent);
+  }
+  45% {
+    transform: scale(1.3);
+  }
+  100% {
+    transform: scale(1);
+    color: var(--text-2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass-range:hover::-webkit-slider-thumb,
+  .glass-range:active::-webkit-slider-thumb,
+  .glass-val.bump {
+    animation: none;
+  }
+}

@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ClipLite</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script type="module" src="main.js" defer></script>
+  </head>
+
+  <body>
+    <div id="app">
+      <!-- 毛玻璃背景层：截屏模糊层 + 染色层（自绘玻璃，任意系统版本可用） -->
+      <div id="glass-bg" aria-hidden="true"></div>
+      <div id="glass-tint" aria-hidden="true"></div>
+
+      <!-- 非 Tauri 环境提示（普通浏览器打开时显示） -->
+      <div id="env-hint" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="16" x2="12" y2="12" />
+          <line x1="12" y1="8" x2="12.01" y2="8" />
+        </svg>
+        <span>请在 ClipLite 中运行</span>
+      </div>
+
+      <!-- 搜索栏 -->
+      <header class="search-bar">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+        <input id="search-input" type="text" placeholder="搜索剪贴板…" autocomplete="off" spellcheck="false" />
+        <button id="clear-btn" class="search-clear" title="清空搜索" aria-label="清空搜索" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="7" y1="7" x2="17" y2="17" />
+            <line x1="17" y1="7" x2="7" y2="17" />
+          </svg>
+        </button>
+        <button id="settings-btn" class="icon-btn" title="设置" aria-label="设置">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
+      </header>
+
+      <!-- 列表区域 -->
+      <main id="list">
+        <!-- 置顶分组 -->
+        <section id="pinned-group" class="group" hidden>
+          <h2 class="group-title">
+            <svg class="group-icon" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
+            置顶
+          </h2>
+          <ul id="pinned-list" class="items"></ul>
+        </section>
+
+        <!-- 历史分组 -->
+        <section id="history-group" class="group">
+          <h2 class="group-title">
+            <svg class="group-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+            历史
+          </h2>
+          <ul id="history-list" class="items"></ul>
+        </section>
+
+        <!-- 空状态 -->
+        <div id="empty-state" class="empty-state" hidden>暂无复制记录</div>
+      </main>
+    </div>
+
+    <!-- 右键菜单 -->
+    <div id="context-menu" class="context-menu" role="menu">
+      <button class="menu-item" data-action="copy" role="menuitem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+        </svg>
+        <span>复制</span>
+      </button>
+      <button class="menu-item" data-action="pin" role="menuitem">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+        </svg>
+        <span>置顶</span>
+      </button>
+      <div class="menu-sep"></div>
+      <button class="menu-item danger" data-action="delete" role="menuitem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6" />
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+          <line x1="10" y1="11" x2="10" y2="17" />
+          <line x1="14" y1="11" x2="14" y2="17" />
+        </svg>
+        <span>删除</span>
+      </button>
+    </div>
+
+    <!-- 设置弹窗 -->
+    <div id="modal-backdrop" class="modal-backdrop" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <h2 id="modal-title">设置</h2>
+
+        <!-- 全局热键 -->
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-name">全局热键</div>
+            <div class="setting-desc">唤起剪贴板面板</div>
+          </div>
+          <div class="hotkey-wrap">
+            <button id="hotkey-btn" class="hotkey-btn" title="点击修改">未设置</button>
+            <button id="hotkey-cancel" class="text-btn" hidden>取消</button>
+          </div>
+        </div>
+
+        <!-- 透出强度 -->
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-name">透出强度</div>
+            <div class="setting-desc">毛玻璃的透明程度，拖动实时预览</div>
+          </div>
+          <div class="glass-control">
+            <input type="range" id="glass-range" class="glass-range" min="0" max="100" value="50" aria-label="透出强度" />
+            <span id="glass-val" class="glass-val">50%</span>
+          </div>
+        </div>
+
+        <!-- 开机自启 -->
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-name">开机自启</div>
+            <div class="setting-desc">登录系统后自动运行</div>
+          </div>
+          <label class="switch" title="开机自启">
+            <input type="checkbox" id="autostart-switch" />
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <!-- 退出时清空 -->
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-name">退出时清空</div>
+            <div class="setting-desc">退出程序时删除全部记录</div>
+          </div>
+          <label class="switch" title="退出时清空">
+            <input type="checkbox" id="clear-switch" />
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <!-- 热键注册失败提示 -->
+        <div id="hotkey-error" class="hotkey-error" hidden></div>
+
+        <div class="modal-footer">
+          <button id="modal-close" class="btn">取消</button>
+          <button id="modal-save" class="btn primary">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 轻提示 -->
+    <div id="toast" class="toast" role="status" hidden></div>
+  </body>
+</html>
