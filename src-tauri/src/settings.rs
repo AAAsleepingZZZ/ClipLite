@@ -2,13 +2,23 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
 
 /// 默认呼出热键
 pub const DEFAULT_HOTKEY: &str = "Ctrl+Shift+V";
+
+/// 历史条数上限的默认值与允许范围
+pub const DEFAULT_MAX_ITEMS: i64 = 500;
+pub const MAX_ITEMS_MIN: i64 = 50;
+pub const MAX_ITEMS_MAX: i64 = 5000;
+
+/// 图片大小上限（MB）的默认值与允许范围
+pub const DEFAULT_MAX_IMAGE_MB: i64 = 10;
+pub const MAX_IMAGE_MB_MIN: i64 = 1;
+pub const MAX_IMAGE_MB_MAX: i64 = 100;
 
 /// 应用设置
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -23,11 +33,27 @@ pub struct Settings {
     /// 毛玻璃染色层不透明度（0.30~0.62，越小透出越强）
     #[serde(alias = "glassAlpha", default = "default_glass_alpha")]
     pub glass_alpha: f64,
+    /// 历史条数上限，超出后清理最旧非置顶条目
+    #[serde(alias = "maxItems", default = "default_max_items")]
+    pub max_items: i64,
+    /// 图片大小上限（MB），超限图片跳过不记录
+    #[serde(alias = "maxImageMb", default = "default_max_image_mb")]
+    pub max_image_mb: i64,
 }
 
 /// 默认染色不透明度（当前视觉默认值）
 fn default_glass_alpha() -> f64 {
     0.46
+}
+
+/// 默认历史条数上限
+fn default_max_items() -> i64 {
+    DEFAULT_MAX_ITEMS
+}
+
+/// 默认图片大小上限（MB）
+fn default_max_image_mb() -> i64 {
+    DEFAULT_MAX_IMAGE_MB
 }
 
 impl Default for Settings {
@@ -37,14 +63,17 @@ impl Default for Settings {
             clear_on_exit: false,
             autostart: false,
             glass_alpha: default_glass_alpha(),
+            max_items: default_max_items(),
+            max_image_mb: default_max_image_mb(),
         }
     }
 }
 
-/// 托管在 Tauri 状态中的设置（含配置文件目录，供 update_settings 落盘使用）
+/// 托管在 Tauri 状态中的设置（含配置文件目录，供 update_settings 落盘使用）。
+/// settings 用 Arc 共享，监听线程可实时读取容量参数。
 pub struct SettingsState {
     pub config_dir: PathBuf,
-    pub settings: Mutex<Settings>,
+    pub settings: Arc<Mutex<Settings>>,
 }
 
 /// 读取设置；文件不存在或解析失败时回退默认值并写回默认文件。

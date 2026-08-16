@@ -63,6 +63,17 @@ pub fn run() {
             commands::get_settings,
             commands::update_settings,
             commands::hide_panel,
+            commands::get_snippets,
+            commands::add_snippet,
+            commands::update_snippet,
+            commands::delete_snippet,
+            commands::rename_group,
+            commands::delete_group,
+            commands::add_group,
+            commands::get_groups,
+            commands::copy_text,
+            commands::paste_text,
+            commands::get_file_thumb,
         ])
         .setup(|app| {
             setup_app(app)?;
@@ -100,15 +111,20 @@ pub fn run() {
 fn setup_app(app: &tauri::App) -> Result<(), String> {
     // 数据目录（数据库 + 图片）
     let data_dir: PathBuf = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let store = Arc::new(Mutex::new(Store::new(&data_dir).map_err(|e| e.to_string())?));
+    let store = Store::new(&data_dir).map_err(|e| e.to_string())?;
+    let store = Arc::new(Mutex::new(store));
     app.manage(store.clone());
 
-    // 设置（含配置文件目录）
+    // 设置（含配置文件目录）；Arc 共享给监听线程，容量参数实时生效
     let config_dir: PathBuf = app.path().app_config_dir().map_err(|e| e.to_string())?;
-    let settings = settings::load_settings(&config_dir);
+    let settings = Arc::new(Mutex::new(settings::load_settings(&config_dir)));
+    {
+        let s = settings.lock().map_err(|e| e.to_string())?;
+        store.lock().map_err(|e| e.to_string())?.set_max_items(s.max_items);
+    }
     app.manage(SettingsState {
         config_dir,
-        settings: Mutex::new(settings.clone()),
+        settings: settings.clone(),
     });
 
     // 剪贴板封装（共享"自身写入"标记）
@@ -127,7 +143,11 @@ fn setup_app(app: &tauri::App) -> Result<(), String> {
     tray::create_tray(app.handle(), store.clone()).map_err(|e| e.to_string())?;
 
     // 注册全局热键；失败（如键位被其他程序占用）仅记录日志
-    match settings::parse_hotkey(&settings.hotkey) {
+    let hotkey_str = {
+        let s = settings.lock().map_err(|e| e.to_string())?;
+        s.hotkey.clone()
+    };
+    match settings::parse_hotkey(&hotkey_str) {
         Ok(shortcut) => {
             if let Err(e) = app.global_shortcut().register(shortcut) {
                 eprintln!("[ClipLite] 全局热键注册失败: {e}");
@@ -139,7 +159,8 @@ fn setup_app(app: &tauri::App) -> Result<(), String> {
     // 按设置同步开机自启状态
     {
         use tauri_plugin_autostart::ManagerExt;
-        let result = if settings.autostart {
+        let autostart = settings.lock().map_err(|e| e.to_string())?.autostart;
+        let result = if autostart {
             app.autolaunch().enable()
         } else {
             app.autolaunch().disable()
@@ -150,7 +171,7 @@ fn setup_app(app: &tauri::App) -> Result<(), String> {
     }
 
     // 启动剪贴板监听线程
-    listener::spawn(store, app.handle().clone(), clipboard);
+    listener::spawn(store, app.handle().clone(), clipboard, settings);
 
     // 命名事件触发通道：任何进程 SetEvent("ClipLite_ShowPanel") 即可呼出面板
     // （与热键同一路径，便于命令行/外部工具触发与自动化测试）

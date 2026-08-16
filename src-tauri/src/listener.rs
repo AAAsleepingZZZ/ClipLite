@@ -9,23 +9,27 @@ use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Gdi::HBRUSH;
 use windows::Win32::System::DataExchange::AddClipboardFormatListener;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::System::Threading::{
+    OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
+};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, GetWindowLongPtrW,
-    RegisterClassW, SetWindowLongPtrW, TranslateMessage, GWLP_USERDATA, HCURSOR, HICON, MSG,
-    WNDCLASSW, WNDCLASS_STYLES, WINDOW_EX_STYLE, WINDOW_STYLE, WM_CLIPBOARDUPDATE,
+    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetForegroundWindow, GetMessageW,
+    GetWindowLongPtrW, GetWindowTextW, GetWindowThreadProcessId, RegisterClassW,
+    SetWindowLongPtrW, TranslateMessage, GWLP_USERDATA, HCURSOR, HICON, MSG, WNDCLASSW,
+    WNDCLASS_STYLES, WINDOW_EX_STYLE, WINDOW_STYLE, WM_CLIPBOARDUPDATE,
 };
 
 use crate::clipboard::Clipboard;
+use crate::settings::{Settings, MAX_IMAGE_MB_MAX, MAX_IMAGE_MB_MIN};
 use crate::store::{hash_bytes, Store};
-
-/// 原始像素字节超过该值（10MB）的图片不记录
-const MAX_IMAGE_BYTES: usize = 10 * 1024 * 1024;
 
 /// 监听线程上下文，通过窗口 GWLP_USERDATA 传给窗口过程
 struct ListenerContext {
     store: Arc<Mutex<Store>>,
     app: AppHandle,
     clipboard: Arc<Clipboard>,
+    /// 共享设置（与设置面板同一引用，图片大小上限实时生效）
+    settings: Arc<Mutex<Settings>>,
 }
 
 /// 隐藏消息窗口的窗口过程：处理 WM_CLIPBOARDUPDATE，其余交给 DefWindowProcW
@@ -56,12 +60,25 @@ impl ListenerContext {
             return;
         }
 
+        // 记录来源（前台窗口的应用名与窗口标题）；自身窗口返回 None
+        let src = foreground_source();
+        let source: Option<(&str, &str)> = src.as_ref().map(|(a, t)| (a.as_str(), t.as_str()));
+
         let inserted = if self.clipboard.has_image() {
             match self.clipboard.read_image() {
                 None => return,
                 Some(img) => {
-                    // 超大图片（原始像素 >10MB）直接跳过
-                    if img.bytes.len() > MAX_IMAGE_BYTES {
+                    // 图片大小上限来自设置（MB），超限直接跳过
+                    let max_mb = self
+                        .settings
+                        .lock()
+                        .map(|s| s.max_image_mb)
+                        .unwrap_or(10);
+                    let max_bytes = (max_mb.clamp(MAX_IMAGE_MB_MIN, MAX_IMAGE_MB_MAX)
+                        as usize)
+                        * 1024
+                        * 1024;
+                    if img.bytes.len() > max_bytes {
                         return;
                     }
                     // RGBA → PNG 编码
@@ -76,7 +93,7 @@ impl ListenerContext {
                         return;
                     }
                     match self.store.lock() {
-                        Ok(store) => store.insert_image(&tmp_path),
+                        Ok(store) => store.insert_image(&tmp_path, source),
                         Err(_) => return,
                     }
                 }
@@ -86,7 +103,7 @@ impl ListenerContext {
             match self.clipboard.read_files() {
                 None => return,
                 Some(paths) => match self.store.lock() {
-                    Ok(store) => store.insert_files(&paths),
+                    Ok(store) => store.insert_files(&paths, source),
                     Err(_) => return,
                 },
             }
@@ -95,7 +112,7 @@ impl ListenerContext {
                 None => return,
                 Some(text) if text.trim().is_empty() => return,
                 Some(text) => match self.store.lock() {
-                    Ok(store) => store.insert_text(&text),
+                    Ok(store) => store.insert_text(&text, source),
                     Err(_) => return,
                 },
             }
@@ -105,6 +122,69 @@ impl ListenerContext {
         if matches!(inserted, Ok(Some(_))) {
             let _ = self.app.emit("clipboard-updated", ());
         }
+    }
+}
+
+/// 获取当前前台窗口的来源信息：(exe 名, 窗口标题)。
+/// 前台窗口是 ClipLite 自身时返回 None；任何一步失败均返回 None（不阻塞入库）。
+fn foreground_source() -> Option<(String, String)> {
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd.0.is_null() {
+            return None;
+        }
+
+        // 窗口标题
+        let mut title_buf = [0u16; 512];
+        let title_len = GetWindowTextW(hwnd, &mut title_buf);
+        let title = String::from_utf16_lossy(&title_buf[..title_len as usize]);
+
+        // 进程 PID → exe 全路径
+        let mut pid = 0;
+        GetWindowThreadProcessId(hwnd, Some(&mut pid));
+        if pid == 0 {
+            return None;
+        }
+        let process = match OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION,
+            false,
+            pid,
+        ) {
+            Ok(p) => p,
+            Err(_) => return None,
+        };
+        let mut exe_buf = [0u16; 1024];
+        let mut exe_len = exe_buf.len() as u32;
+        if QueryFullProcessImageNameW(
+            process,
+            windows::Win32::System::Threading::PROCESS_NAME_FORMAT(0),
+            windows::core::PWSTR(exe_buf.as_mut_ptr()),
+            &mut exe_len,
+        )
+        .is_err()
+        {
+            return None;
+        }
+        let exe_path = String::from_utf16_lossy(&exe_buf[..exe_len as usize]);
+        let exe_name = std::path::Path::new(&exe_path)
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+        if exe_name.is_empty() {
+            return None;
+        }
+
+        // 自身窗口（面板打开时复制了内容）不记录来源
+        if let Ok(self_exe) = std::env::current_exe() {
+            if self_exe
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                == Some(exe_name.clone())
+            {
+                return None;
+            }
+        }
+        Some((exe_name, title))
     }
 }
 
@@ -122,16 +202,26 @@ fn encode_png(img: &arboard::ImageData) -> Option<Vec<u8>> {
 }
 
 /// 启动剪贴板监听线程
-pub fn spawn(store: Arc<Mutex<Store>>, app: AppHandle, clipboard: Arc<Clipboard>) {
+pub fn spawn(
+    store: Arc<Mutex<Store>>,
+    app: AppHandle,
+    clipboard: Arc<Clipboard>,
+    settings: Arc<Mutex<Settings>>,
+) {
     std::thread::Builder::new()
         .name("clipboard-listener".to_string())
-        .spawn(move || run_listener(store, app, clipboard))
+        .spawn(move || run_listener(store, app, clipboard, settings))
         .expect("无法启动剪贴板监听线程");
 }
 
 /// 创建隐藏消息窗口并进入消息循环（阻塞直到进程退出）。
 /// 全部为 Windows 原生 API，统一放在 unsafe 块中。
-fn run_listener(store: Arc<Mutex<Store>>, app: AppHandle, clipboard: Arc<Clipboard>) {
+fn run_listener(
+    store: Arc<Mutex<Store>>,
+    app: AppHandle,
+    clipboard: Arc<Clipboard>,
+    settings: Arc<Mutex<Settings>>,
+) {
     unsafe {
         let hmodule = match GetModuleHandleW(None) {
             Ok(m) => m,
@@ -186,7 +276,12 @@ fn run_listener(store: Arc<Mutex<Store>>, app: AppHandle, clipboard: Arc<Clipboa
         }
 
         // 把上下文挂到窗口用户数据上，供窗口过程取用
-        let ctx = Box::into_raw(Box::new(ListenerContext { store, app, clipboard }));
+        let ctx = Box::into_raw(Box::new(ListenerContext {
+            store,
+            app,
+            clipboard,
+            settings,
+        }));
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, ctx as isize);
 
         // 消息循环：GetMessageW 返回 0（WM_QUIT）时退出

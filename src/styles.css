@@ -1057,3 +1057,405 @@ mark {
   text-overflow: ellipsis;
   margin-top: 1px;
 }
+
+/* ============================================================
+   V5 完整版：Tab 导航 / 来源筛选 / 片段库
+   ============================================================ */
+
+/* ---- Tab 导航：胶囊 + 滑动指示 ---- */
+.tab-bar {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  gap: 2px;
+  margin: 8px 10px 0;
+  padding: 3px;
+  background: rgba(255, 255, 255, 0.045);
+  border-radius: 10px;
+}
+
+.tab-btn {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: color var(--dur), background-color var(--dur);
+}
+
+.tab-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+.tab-btn:hover {
+  color: var(--text-1);
+}
+
+.tab-btn.active {
+  color: var(--text-1);
+  font-weight: 600;
+}
+
+/* 滑动指示条：跟随激活 Tab（JS 同步位置），胶囊内底色 */
+.tab-indicator {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc(50% - 4px);
+  background: rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25);
+  transition: transform 180ms cubic-bezier(0.2, 0.9, 0.3, 1.1);
+  pointer-events: none;
+}
+
+/* ---- 来源 / 分组筛选 chips ---- */
+.source-bar {
+  flex-shrink: 0;
+  margin: 8px 10px 0;
+}
+
+.source-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+
+.source-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 11.5px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--dur), color var(--dur), border-color var(--dur);
+}
+
+.chip:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--text-1);
+}
+
+.chip.active {
+  background: rgba(108, 140, 255, 0.16);
+  border-color: rgba(108, 140, 255, 0.35);
+  color: #b9c6ff;
+}
+
+.chip-count {
+  font-size: 10.5px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.chip.active .chip-count {
+  color: rgba(185, 198, 255, 0.7);
+}
+
+.chip.add {
+  width: 24px;
+  padding: 0;
+  justify-content: center;
+  color: var(--text-3);
+}
+
+.chip.add svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* ---- 通用视图容器（历史 / 片段库共用） ---- */
+.view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0 10px 8px;
+}
+
+/* ---- 片段库视图 ---- */
+.snippet-toolbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+
+.snippet-toolbar .source-chips {
+  flex: 1;
+}
+
+.add-snippet-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 12px;
+  background: rgba(108, 140, 255, 0.14);
+  color: #b9c6ff;
+  font: inherit;
+  font-size: 11.5px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--dur), color var(--dur);
+}
+
+.add-snippet-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.add-snippet-btn:hover {
+  background: rgba(108, 140, 255, 0.24);
+  color: #fff;
+}
+
+#snippet-list {
+  flex: 1;
+}
+
+/* 片段条目：标题 + 内容预览 + 时间 */
+.item-snippet {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 10px;
+}
+
+.item-snippet-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(108, 140, 255, 0.1);
+  color: var(--accent);
+}
+
+.item-snippet-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.item-snippet-title {
+  font-size: 13px;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item-snippet-preview {
+  margin-top: 1px;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- 历史条目来源次级行 ---- */
+.item-source {
+  margin-top: 1px;
+  font-size: 10.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 文本条目带来源时增加副行，主预览单行压缩 */
+.item-text .item-preview {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+  overflow: hidden;
+}
+
+/* ---- 片段编辑弹窗 ---- */
+.snippet-modal {
+  width: 320px;
+}
+
+.snippet-field {
+  margin-top: 12px;
+}
+
+.snippet-field .setting-name {
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.snippet-input,
+.snippet-textarea,
+.snippet-select {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--r-xs);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-1);
+  font: inherit;
+  font-size: 12.5px;
+  outline: none;
+  transition: border-color var(--dur), box-shadow var(--dur);
+}
+
+.snippet-input {
+  height: 30px;
+  padding: 0 10px;
+}
+
+.snippet-textarea {
+  padding: 8px 10px;
+  resize: vertical;
+  min-height: 72px;
+  line-height: 1.5;
+  user-select: text;
+}
+
+.snippet-select {
+  height: 30px;
+  padding: 0 8px;
+  cursor: pointer;
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.snippet-select option {
+  background: #1e1e28;
+  color: var(--text-1);
+}
+
+.snippet-input:focus,
+.snippet-textarea:focus,
+.snippet-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(108, 140, 255, 0.15);
+}
+
+/* ---- 分组管理弹窗 ---- */
+.group-modal-footer {
+  justify-content: space-between;
+  align-items: center;
+}
+
+.group-modal-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn.danger-ghost {
+  background: rgba(229, 106, 106, 0.12);
+  color: var(--danger);
+}
+
+.btn.danger-ghost:hover {
+  background: rgba(229, 106, 106, 0.22);
+  color: #ff8f8f;
+}
+
+/* ---- 片段弹窗字段间距 ---- */
+.snippet-field + .snippet-field {
+  margin-top: 12px;
+}
+
+/* ---- 图片文件条目：缩略图布局 ---- */
+.item-file-img {
+  height: 80px;
+  padding: 8px 10px;
+}
+
+.item-file-img .item-thumb {
+  width: 64px;
+  height: 64px;
+}
+
+.item-file-img .item-file-path {
+  max-width: 100%;
+}
+
+/* ---- 片段条目 ⋮ 按钮 ---- */
+.item-more-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: background-color var(--dur), color var(--dur);
+}
+
+.item-more-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.item-more-btn:hover {
+  background: var(--hover);
+  color: var(--text-1);
+}
+
+/* ---- 分组 chip 右侧 ⋮ 管理按钮 ---- */
+.chip-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-right: -4px;
+  border-radius: 4px;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: background-color var(--dur), color var(--dur);
+}
+
+.chip-more svg {
+  width: 11px;
+  height: 11px;
+}
+
+.chip-more:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-1);
+}
+
+.chip.active .chip-more {
+  color: rgba(185, 198, 255, 0.75);
+}

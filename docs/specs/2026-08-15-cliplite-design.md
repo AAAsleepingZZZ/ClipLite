@@ -1,11 +1,12 @@
 # ClipLite — 轻量美观剪贴板设计文档
 
-日期：2026-08-15 · 状态：已批准实施
+日期：2026-08-15 · 状态：已批准实施 · v0.3.0 已扩展
 
 ## 需求
 
 Windows 剪贴板管理器：托盘常驻 + 全局热键呼出深色毛玻璃面板，单击复制、双击粘贴。
-核心版功能：文本/图片历史、模糊搜索、置顶收藏、全局热键、托盘、SQLite 持久化（500 条自动清理）。
+核心版功能：文本/图片/文件历史、模糊搜索、置顶收藏、全局热键、托盘、SQLite 持久化（500 条自动清理）。
+v0.3.0 扩展：来源记录与筛选、常用片段库（分组管理）、容量参数可调、图片文件缩略图。
 
 ## 技术选型
 
@@ -40,9 +41,45 @@ CREATE TABLE items (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   kind TEXT NOT NULL, content TEXT, image_path TEXT,
   hash TEXT NOT NULL UNIQUE, pinned INTEGER DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  source_app TEXT,        -- v0.3：来源应用 exe 名（旧库自动迁移补列）
+  source_title TEXT       -- v0.3：来源窗口标题
+);
+
+CREATE TABLE snippets (   -- v0.3：常用片段库（仅文本，分组用 group_name 字段）
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  content TEXT NOT NULL,
+  title TEXT,
+  group_name TEXT NOT NULL DEFAULT '默认',
   created_at INTEGER NOT NULL
 );
+
+CREATE TABLE snippet_groups (  -- v0.3：分组独立持久化（空分组也保留，默认组始终存在）
+  name TEXT PRIMARY KEY
+);
 ```
+
+## v0.3 IPC 扩展
+
+- `get_snippets()` → `[{id, content, title, groupName, createdAt}]`
+- `add_snippet({content, title?, groupName?})` / `update_snippet({id, content?, title?, groupName?})` / `delete_snippet({id})`
+- `get_groups()` → `[groupName...]`（独立分组表，含空分组）
+- `add_group({name})`（重名报错）/ `rename_group({oldName, newName})`（重名报错）/ `delete_group({name})`（组内片段移入「默认」）
+- `copy_text({content})` / `paste_text({content})`（片段单击复制、双击/回车粘贴）
+- `get_file_thumb({id})` → 128x128 方形缩略图 base64（文件条目是图片时预览）
+- `get_items` 条目新增 `sourceApp` / `sourceTitle` 字段
+- 前端片段条目与分组 chip 均有 ⋮ 按钮：打开与右键一致的管理菜单
+
+## v0.3 设置扩展
+
+- `max_items`（历史条数上限，默认 500，范围 50~5000，调低立即清理）
+- `max_image_mb`（图片大小上限 MB，默认 10，范围 1~100）
+
+## 边界情况（v0.3 补充）
+
+- 来源获取失败静默跳过（前台窗口句柄失效/权限不足时来源为空，不阻塞入库）
+- 来源为 ClipLite 自身窗口时不记录（面板打开时复制的内容仍正常入库，只是无来源）
+- 图片文件缩略图仅对常见位图扩展名（png/jpg/jpeg/gif/webp/bmp）生成，其余保持文件图标
 
 ## 边界情况
 
